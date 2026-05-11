@@ -1,0 +1,112 @@
+name: Pinterest Batch Pin Creator
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      csv_file:
+        description: 'Path to CSV file (e.g., pins/batch_2026_01_07.csv)'
+        required: true
+        default: 'pins/batch_YYYY_MM_DD.csv'
+  
+  # Automatic daily trigger at 11 AM AST (3 PM UTC)
+  schedule:
+    - cron: '0 15 * * *'
+
+jobs:
+  create-pins:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Detect CSV file (scheduled runs)
+      if: github.event_name == 'schedule'
+      id: detect_csv
+      run: |
+        # Get today's date in YYYY_MM_DD format
+        TODAY=$(date +"%Y_%m_%d")
+        CSV_FILE="pins/batch_${TODAY}.csv"
+        
+        if [ -f "$CSV_FILE" ]; then
+          echo "csv_file=$CSV_FILE" >> $GITHUB_OUTPUT
+          echo "✅ Found scheduled CSV: $CSV_FILE"
+        else
+          echo "csv_file=" >> $GITHUB_OUTPUT
+          echo "⏭️  No CSV file found for today ($CSV_FILE)"
+          exit 0  # Don't fail, just skip
+        fi
+      
+    - name: Stop if no CSV (scheduled runs)
+      if: github.event_name == 'schedule' && steps.detect_csv.outputs.csv_file == ''
+      run: |
+        echo "ℹ️  No batch file found for today, skipping"
+        exit 0
+    
+    - name: Set CSV file path
+      id: csv_path
+      run: |
+        if [ "${{ github.event_name }}" = "schedule" ]; then
+          CSV_FILE="${{ steps.detect_csv.outputs.csv_file }}"
+        else
+          CSV_FILE="${{ github.event.inputs.csv_file }}"
+        fi
+        echo "csv_file=$CSV_FILE" >> $GITHUB_OUTPUT
+      
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Verify CSV file exists
+      run: |
+        CSV_PATH="${{ steps.csv_path.outputs.csv_file }}"
+        if [ ! -f "$CSV_PATH" ]; then
+          echo "❌ CSV file not found: $CSV_PATH"
+          exit 1
+        fi
+        echo "✅ Found CSV file: $CSV_PATH"
+        
+    - name: Show CSV contents
+      run: |
+        echo "📋 CSV Contents:"
+        cat "${{ steps.csv_path.outputs.csv_file }}"
+        
+    - name: Verify image files exist
+      run: |
+        echo "🔍 Checking if all image files in CSV exist..."
+        go run main.go check-images "${{ steps.csv_path.outputs.csv_file }}"
+        
+    - name: Create Pinterest Pins
+      env:
+        PINTEREST_APP_ID: ${{ secrets.PINTEREST_APP_ID }}
+        PINTEREST_APP_SECRET: ${{ secrets.PINTEREST_APP_SECRET }}
+        PINTEREST_REFRESH_TOKEN: ${{ secrets.PINTEREST_REFRESH_TOKEN }}
+        PINTEREST_BOARD_ID: ${{ secrets.PINTEREST_BOARD_ID }}
+        INPUT_CSV_PATH: ${{ steps.csv_path.outputs.csv_file }}
+      run: |
+        echo "🚀 Starting batch pin creation..."
+        go run main.go
+        
+    # - name: Archive processed CSV
+    #   if: success() && github.event.inputs.archive_after_success == 'true'
+    #   run: |
+    #     # Create archive directory if it doesn't exist
+    #     mkdir -p pins/archive
+        
+    #     # Move CSV to archive with timestamp
+    #     CSV_PATH="${{ github.event.inputs.csv_file }}"
+    #     TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    #     BASENAME=$(basename "$CSV_PATH" .csv)
+    #     ARCHIVE_NAME="pins/archive/${BASENAME}_processed_${TIMESTAMP}.csv"
+        
+    #     mv "$CSV_PATH" "$ARCHIVE_NAME"
+    #     echo "📦 Archived CSV to: $ARCHIVE_NAME"
+        
+    #     # Commit the archive
+    #     git config --local user.email "action@github.com"
+    #     git config --local user.name "GitHub Action"
+    #     git add pins/archive/
+    #     git commit -m "📦 Archive processed batch: $(basename "$CSV_PATH")" || exit 0
+    #     git push
