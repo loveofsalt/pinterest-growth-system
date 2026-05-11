@@ -1,5 +1,9 @@
 ### Why this is necessary
 
+Find most of this info at https://developer.pinterest.com. Make sure that the Pinterest is a business account. 
+
+Create an app on pinterest and fill in the required details. 
+
 This process establishes a secure connection using **OAuth 2.0**, the industry standard for API authorization. Before your application can automate tasks (like creating pins), it must obtain an **Access Token**.
 
 We perform this two-step "handshake" to ensure security:
@@ -29,3 +33,8 @@ Now make this call to the API (fill it with your app's information and the code 
 * **redirect_uri**: Use the exact same URI that you used in step 1.
 
 <img width="1140" height="184" alt="unnamed (1)" src="https://github.com/user-attachments/assets/2a0268a3-a107-4890-a641-1bd951d4ec1f" />
+
+
+### 3. App ID
+PINTEREST_APP_ID
+
